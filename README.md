@@ -25,6 +25,7 @@
 ```
 python3 opendict_fetch.py fetch --range 1 1600000    # 하루 한도에서 멈추고, 다시 실행하면 이어서(전체 약 35일)
 python3 opendict_fetch.py status
+python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd(매일 09:15)가 실행: 잠금·시각 붙은 로그 data/fetch.log
 python3 opendict_fetch.py fetch --range 1 1600000 --retry-unavailable   # HTTP 500 이던 코드 다시 시도
 ```
 

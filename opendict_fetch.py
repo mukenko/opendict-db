@@ -8,11 +8,14 @@ SQLite(data/raw.sqlite)에 압축 저장한다. 스키마 변환은 이 스크�
   python3 opendict_fetch.py fetch --range 1 1600000    # 코드 범위 스캔(이어받기, 하루 한도에서 멈춤; 전체 약 35일)
   python3 opendict_fetch.py fetch --codes 450817      # 코드 지정
   python3 opendict_fetch.py status                     # 진행 현황
+  python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd 용: 전체 범위, 잠금·시각 붙은 로그(data/fetch.log, 15일 보관)
 
 인증키는 환경변수 OPENDICT_API_KEY 또는 이 파일 옆의 .env 에서 읽는다.
 """
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
 import http.client
 import os
 import re
@@ -262,7 +265,93 @@ def run_codes(client, codes, force=False, verbose=False, retry_unavailable=False
 
 
 # ---------------------------------------------------------------- 명령
+LOG_PATH = ROOT / "data" / "fetch.log"
+LAUNCHD_LOG = ROOT / "data" / "fetch_launchd.log"
+LOCK_PATH = ROOT / "data" / ".fetch.lock"
+LOG_KEEP_DAYS = 15              # projects/CLAUDE.md 작업 원칙 1
+SCAN_RANGE = (1, 1600000)       # 존재하는 코드는 약 1,553,000 까지, 그 뒤는 total=0
+
+
+def log(msg):
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(f"[{dt.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}\n")
+
+
+def trim_log(path, days=LOG_KEEP_DAYS):
+    """[YYYY-MM-DD HH:MM:SS] 로 시작하는 줄 중 days 일 지난 것을 지운다."""
+    if not path.exists():
+        return
+    cutoff = (dt.datetime.now() - dt.timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    keep, keeping = [], True
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True):
+        m = re.match(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]", line)
+        if m:
+            keeping = m.group(1) >= cutoff
+        if keeping:
+            keep.append(line)
+    path.write_text("".join(keep), encoding="utf-8")
+
+
+def trim_by_mtime(path, days=LOG_KEEP_DAYS):
+    """launchd 가 직접 받는 로그(줄마다 시간 없음): 마지막 수정 후 days 일이 지났으면 비운다."""
+    if path.exists() and time.time() - path.stat().st_mtime > days * 86400:
+        path.write_text("")
+
+
+class LogWriter:
+    """print 하는 줄을 시각을 붙여 로그로 보낸다."""
+    def __init__(self):
+        self.buf = ""
+
+    def write(self, s):
+        self.buf += s
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            if line.strip():
+                log(line.strip())
+        return len(s)
+
+    def flush(self):
+        pass
+
+
+def pending(db, start, end):
+    n = db.execute(
+        "SELECT COUNT(*) FROM fetch_state WHERE target_code BETWEEN ? AND ? "
+        "AND status IN ('ok','empty','unavailable')", (start, end)).fetchone()[0]
+    return (end - start + 1) - n
+
+
+def cmd_scheduled(args):
+    """launchd 용: 전체 범위를 이어받고, 시각 붙은 로그에 남긴다. 이미 실행 중이면 건너뛴다."""
+    trim_log(LOG_PATH)
+    trim_by_mtime(LAUNCHD_LOG)
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lock = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log("이미 다른 실행이 진행 중이라 건너뜁니다.")
+        return
+    db = open_db()
+    start, end = SCAN_RANGE
+    left = pending(db, start, end)
+    if left == 0:
+        log("수집 완료 상태입니다. 고친 날짜(update_s) 정기 업데이트(opendict_update.py)는 아직 없습니다.")
+        return
+    client = Client(load_key(), db, args.limit, args.sleep)
+    log(f"시작: 남은 코드 {left}개, 오늘 호출 {client.used_today()}/{client.limit}")
+    with contextlib.redirect_stdout(LogWriter()):
+        run_codes(client, list(range(start, end + 1)), retry_unavailable=args.retry_unavailable)
+    log(f"끝: 남은 코드 {pending(db, start, end)}개")
+
+
 def cmd_fetch(args):
+    if args.scheduled:
+        return cmd_scheduled(args)
+    if not (args.codes or args.range):
+        sys.exit("--codes, --range, --scheduled 중 하나가 필요합니다.")
     db = open_db()
     client = Client(load_key(), db, args.limit, args.sleep)
     codes = args.codes if args.codes else list(range(args.range[0], args.range[1] + 1))
@@ -284,7 +373,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch", help="코드로 수집")
-    g = f.add_mutually_exclusive_group(required=True)
+    g = f.add_mutually_exclusive_group()
+    g.add_argument("--scheduled", action="store_true", help="launchd 용: 전체 범위 이어받기 + 잠금·로그(data/fetch.log)")
     g.add_argument("--codes", nargs="+", type=int)
     g.add_argument("--range", nargs=2, type=int, metavar=("START", "END"))
     f.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="하루 호출 상한 (기본 %(default)s)")
