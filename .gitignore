@@ -8,3 +8,6 @@ data/
 *.sqlite-wal
 *.log
 /HANDOFF.md
+
+# 사용자가 내려받은 통계 파일(참고용, 저장소에는 올리지 않음)
+*.xls
