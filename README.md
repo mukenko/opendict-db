@@ -16,7 +16,7 @@
 | 검색 | `https://opendict.korean.go.kr/api/search` (q, start 1~1000, num 10~100, advanced=y 에서 target·method·date_s/e(올린 날짜)·**update_s/e(고친 날짜)** 등) |
 | 내용 | `https://opendict.korean.go.kr/api/view` (`method=word_info` 또는 `target_code`) |
 
-- 키는 `.env`의 `OPENDICT_API_KEY`에만 두고 저장소에 올리지 않습니다. 하루 호출 한도는 명세에 없어서 다른 사전과 같은 50,000건으로 보고 45,000건에서 멈춥니다(확인 필요).
+- 키는 `.env`의 `OPENDICT_API_KEY`에만 두고 저장소에 올리지 않습니다. 하루 호출 한도는 50,000건입니다(API 사용 신청 페이지 기준). 직접 실행의 기본 상한은 45,000건이고, 매일 자동 실행은 49,000건에서 멈춥니다.
 - **고친 날짜(`update_s`/`update_e`) 검색이 있어서** 정기 업데이트에서 변경을 날짜로 찾을 수 있습니다(우리말역사어휘사전에는 없음).
 - 전체 사전 내려받기는 보이지 않습니다(통계 내려받기만 있음). 그래서 `target_code`를 1부터 훑어 `view`로 받습니다.
 
