@@ -117,7 +117,7 @@ class Server(unittest.TestCase):
         page = get(url)[1].decode("utf-8")
         self.assertIn("북한어", page)
         page = get(self.server.add_query("고드름", **LOOKUP))[1].decode("utf-8")
-        chat = om.lookup_word("고드름")
+        chat = om.opendict_lookup_word("고드름")
         self.assertIn("외 ", chat)                               # 채팅 결과는 방언 관련어를 줄여 보여 주고
         self.assertNotIn("고지름", chat)
         self.assertIn(">고지름", page)                           # 화면에는 줄이지 않고 전부(링크로) 보여 준다
@@ -164,29 +164,29 @@ class Always(unittest.TestCase):
 
     def test_link_always_present_for_found_entries(self):
         for word in ("고드름", "연기", "가다", "나머지모임"):
-            out = om.lookup_word(word)
+            out = om.opendict_lookup_word(word)
             self.assertRegex(out, LINK, word)
             lines = out.split("\n")
             self.assertTrue(lines[-3].startswith("[원본 보기](http"), word)          # 링크 → 출처 → 알림
             self.assertEqual(lines[-2], ol.ATTRIBUTION)
         for by, q in (("definition", "얼어붙은 얼음"), ("hanja", "氷柱"), ("pronunciation", "연:기"), ("form", "가계해"),
                       ("cat", "의학"), ("region", "제주")):
-            self.assertRegex(om.search_dictionary(q, by), LINK, by)
+            self.assertRegex(om.opendict_search_dictionary(q, by), LINK, by)
 
     def test_long_vowel_note_stays_before_the_link(self):
-        out = om.lookup_word("연기")                                              # 장음(ː) 안내가 있는 결과
+        out = om.opendict_lookup_word("연기")                                              # 장음(ː) 안내가 있는 결과
         lines = out.split("\n")
         self.assertTrue(any(ol.LONG_NOTE in ln for ln in lines))
         self.assertLess([i for i, ln in enumerate(lines) if ol.LONG_NOTE in ln][0], [i for i, ln in enumerate(lines) if ln.startswith("[원본 보기]")][0])
 
     def test_no_link_when_nothing_found(self):
-        self.assertNotIn("원본 보기", om.lookup_word("없는말쀏쀏쀏쀏"))
-        self.assertNotIn("원본 보기", om.search_dictionary("없는말쀏쀏쀏쀏", "hanja"))
+        self.assertNotIn("원본 보기", om.opendict_lookup_word("없는말쀏쀏쀏쀏"))
+        self.assertNotIn("원본 보기", om.opendict_search_dictionary("없는말쀏쀏쀏쀏", "hanja"))
 
     def test_remote_mode_returns_the_same_result_without_link(self):
-        local = om.lookup_word("고드름")
+        local = om.opendict_lookup_word("고드름")
         om.HTTP_MODE = True
-        remote = om.lookup_word("고드름")
+        remote = om.opendict_lookup_word("고드름")
         self.assertNotIn("원본 보기", remote)
         self.assertEqual(remote, "\n".join(ln for ln in local.split("\n") if not ln.startswith("[원본 보기](")))
 
@@ -209,7 +209,7 @@ class Protocol(unittest.TestCase):
                 async with ClientSession(r, w) as s:
                     init = await s.initialize()
                     self.assertIn("[원본 보기](URL)", init.instructions)
-                    out = (await s.call_tool("lookup_word", {"word": "고드름"})).content[0].text
+                    out = (await s.call_tool("opendict_lookup_word", {"word": "고드름"})).content[0].text
                     lines = out.split("\n")
                     m = LINK.match(lines[-2])
                     self.assertTrue(m, lines[-2])
@@ -217,7 +217,7 @@ class Protocol(unittest.TestCase):
                     with urllib.request.urlopen(m.group(1), timeout=5) as resp:       # MCP 서버 프로세스가 링크 서버를 띄운다
                         self.assertEqual(resp.status, 200)
                         self.assertIn("고드름", resp.read().decode("utf-8"))
-                    miss = (await s.call_tool("lookup_word", {"word": "없는말쀏쀏쀏쀏"})).content[0].text
+                    miss = (await s.call_tool("opendict_lookup_word", {"word": "없는말쀏쀏쀏쀏"})).content[0].text
                     self.assertNotIn("원본 보기", miss)
         asyncio.run(run())
 
@@ -228,7 +228,7 @@ class Protocol(unittest.TestCase):
             async with stdio_client(params) as (r, w):
                 async with ClientSession(r, w) as s:
                     await s.initialize()
-                    out = (await s.call_tool("lookup_word", {"word": "고드름"})).content[0].text
+                    out = (await s.call_tool("opendict_lookup_word", {"word": "고드름"})).content[0].text
                     self.assertNotIn("원본 보기", out)
                     self.assertIn(ol.ATTRIBUTION, out)
         asyncio.run(run())

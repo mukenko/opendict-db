@@ -29,7 +29,7 @@ python3 opendict_fetch.py fetch --range 1 1870000    # 하루 한도에서 멈�
 python3 opendict_fetch.py status
 python3 opendict_lookup.py 고드름 [--type 방언] [--examples] [--json]   # 표제어 조회(--by definition|hanja|pronunciation|form|cat|region 으로 다른 방식, --code N 으로 코드 조회)
 python3 -m unittest tests.test_lookup -v   # 조회 시험
-python3 opendict_mcp.py --call lookup_word 고드름   # MCP 도구 결과 확인(SDK 없이). 서버: .venv/bin/python opendict_mcp.py [--http --port 8768]
+python3 opendict_mcp.py --call opendict_lookup_word 고드름   # MCP 도구 결과 확인(SDK 없이). 서버: .venv/bin/python opendict_mcp.py [--http --port 8768]
 python3 opendict_build.py            # 원본 -> 조회용 data/opendict.sqlite (검증 통과 시 교체, 이전 버전은 .prev). --limit N 은 시험용
 python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd(매일 02:00, 07:15)가 실행: 잠금·시각 붙은 로그 data/fetch.log
 python3 opendict_fetch.py fetch --range 1 1870000 --retry-unavailable   # HTTP 500 이던 코드 다시 시도
@@ -40,7 +40,7 @@ python3 opendict_fetch.py fetch --range 1 1870000 --retry-unavailable   # HTTP 5
 ## 계획
 
 1. (진행 중) 원본 수집
-2. 스키마 설계 → 빌드(`opendict_build.py`) → 조회(`opendict_lookup.py`) → MCP(`opendict_mcp.py`, 도구 `lookup_word`·`search_dictionary`, stdio/HTTP; 로컬 stdio 에서는 결과 끝에 `[원본 보기](링크)` 가 붙어 `opendict_view.py`/`opendict_page.py` 가 문서형 화면을 보여 준다)
+2. 스키마 설계 → 빌드(`opendict_build.py`) → 조회(`opendict_lookup.py`) → MCP(`opendict_mcp.py`, 도구 `opendict_lookup_word`·`opendict_search_dictionary`, stdio/HTTP; 로컬 stdio 에서는 결과 끝에 `[원본 보기](링크)` 가 붙어 `opendict_view.py`/`opendict_page.py` 가 문서형 화면을 보여 준다)
 3. 정기 업데이트(고친 날짜 검색 + 신규 확인)
 
 ## 데이터 출처

@@ -1,6 +1,6 @@
 """'원본 보기' 링크가 여는, 이 컴퓨터에서만 열리는 작은 웹 서버. 표준 라이브러리만 사용.
 
-조회(lookup_word, search_dictionary) 결과 끝의 링크(http://127.0.0.1:포트/v/키)를 누르면 그때 조회용 DB 에서 읽어
+조회(opendict_lookup_word, opendict_search_dictionary) 결과 끝의 링크(http://127.0.0.1:포트/v/키)를 누르면 그때 조회용 DB 에서 읽어
 문서형 HTML(opendict_page)로 보여 준다. 조회마다 파일을 만들지 않고 검색 조건(spec)만 메모리에 둔다(키는 조건의 해시, 같은 조건은
 최근 MAX_VIEWS 개만 보관).
 

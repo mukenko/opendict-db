@@ -16,7 +16,7 @@ real = unittest.skipUnless(ol.DEFAULT_DB.exists(), "조회용 DB(data/opendict.s
 
 class Static(unittest.TestCase):
     def test_tools_listed(self):
-        self.assertEqual([t.__name__ for t in om.TOOLS], ["lookup_word", "search_dictionary"])
+        self.assertEqual([t.__name__ for t in om.TOOLS], ["opendict_lookup_word", "opendict_search_dictionary"])
         for t in om.TOOLS:
             self.assertTrue(t.__doc__ and "우리말샘" in t.__doc__)
 
@@ -40,16 +40,16 @@ class Static(unittest.TestCase):
 @real
 class Tools(unittest.TestCase):
     def test_lookup_word(self):
-        out = om.lookup_word("나머지모임")
+        out = om.opendict_lookup_word("나머지모임")
         self.assertIn("〈북한어〉", out)
         self.assertIn("우리말샘", out)
 
     def test_errors_become_sentences(self):
-        self.assertIn("사투리", om.lookup_word("고드름", kinds="사투리"))      # 서버가 죽지 않고 문장으로 돌려준다
-        self.assertIn("검색어", om.search_dictionary("", "definition"))
+        self.assertIn("사투리", om.opendict_lookup_word("고드름", kinds="사투리"))      # 서버가 죽지 않고 문장으로 돌려준다
+        self.assertIn("검색어", om.opendict_search_dictionary("", "definition"))
 
     def test_search(self):
-        self.assertIn("450817", om.search_dictionary("길게 얼어붙은 얼음", "definition", limit=5))
+        self.assertIn("450817", om.opendict_search_dictionary("길게 얼어붙은 얼음", "definition", limit=5))
 
     def test_stdout_not_polluted(self):
         # 도구가 print 를 해도 stdio 프로토콜(stdout)을 깨지 않는다: _safe 가 stderr 로 돌린다

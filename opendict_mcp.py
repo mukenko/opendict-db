@@ -3,8 +3,8 @@
 
   .venv/bin/python opendict_mcp.py                      # stdio (LM Studio, Claude 데스크톱이 프로세스를 띄움)
   .venv/bin/python opendict_mcp.py --http [--port 8768] # Streamable HTTP (127.0.0.1 에만 바인드, Bearer 토큰 필수)
-  python3 opendict_mcp.py --call lookup_word 고드름      # SDK 없이 도구 결과 확인(시스템 python 도 가능)
-  python3 opendict_mcp.py --call search_dictionary 氷柱 hanja
+  python3 opendict_mcp.py --call opendict_lookup_word 고드름      # SDK 없이 도구 결과 확인(시스템 python 도 가능)
+  python3 opendict_mcp.py --call opendict_search_dictionary 氷柱 hanja
 
 읽기 전용 도구 2개. DB 경로는 환경변수 OPENDICT_LOOKUP_DB(기본 data/opendict.sqlite).
 모델에 전달하는 문구(지침·도구 설명)는 영어다: 작은 로컬 모델이 더 안정적으로 따르고 토큰이 덜 든다(stdict-db 와 같은 방침).
@@ -132,7 +132,7 @@ def _safe(fn):
 
 
 @_safe
-def lookup_word(word: str, kinds: str = "", max_headwords: int = 12, include_examples: bool = False) -> str:
+def opendict_lookup_word(word: str, kinds: str = "", max_headwords: int = 12, include_examples: bool = False) -> str:
     """Look up a Korean word in Urimalsaem (우리말샘).
     Returns every headword with that spelling (each group is one headword, with superscript homonym numbers where
     the dictionary shows them), its original language/Hanja, pronunciation (ː marks a long vowel), and its senses:
@@ -155,7 +155,7 @@ def lookup_word(word: str, kinds: str = "", max_headwords: int = 12, include_exa
 
 
 @_safe
-def search_dictionary(query: str, by: Literal["definition", "hanja", "pronunciation", "form", "cat", "region"],
+def opendict_search_dictionary(query: str, by: Literal["definition", "hanja", "pronunciation", "form", "cat", "region"],
                       kinds: str = "", limit: int = 10) -> str:
     """Reverse search in Urimalsaem (우리말샘). Each result line is one sense with its headword, kind label and definition.
     by="definition": senses whose definition contains the phrase (3 or more characters are matched as an exact phrase).
@@ -165,7 +165,7 @@ def search_dictionary(query: str, by: Literal["definition", "hanja", "pronunciat
     by="cat": senses of a specialized field, e.g. "의학", "음악", "정보·통신".
     by="region": dialect senses from a region, e.g. "제주", "경남"; combine with kinds="방언".
     To find similar words, vary the query: use key phrases taken from a definition and, for Sino-Korean words, a Hanja
-    search; a few calls are enough. For checking a single known word, use lookup_word instead.
+    search; a few calls are enough. For checking a single known word, use opendict_lookup_word instead.
     Explanations beyond the returned entries belong in a separate part labeled "[사전 외 설명]"; end the answer with the
     source line.
     Args: query = the text to search; by = the search kind above; kinds = optional filter of sense kinds, comma separated
@@ -177,7 +177,7 @@ def search_dictionary(query: str, by: Literal["definition", "hanja", "pronunciat
     return _with_footer(ol.format_search(res), query, spec, bool(res["hits"])) + _notice_tail()
 
 
-TOOLS = (lookup_word, search_dictionary)
+TOOLS = (opendict_lookup_word, opendict_search_dictionary)
 
 
 def _check_db():
