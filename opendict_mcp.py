@@ -30,10 +30,12 @@ from pathlib import Path
 from typing import Literal
 
 import opendict_lookup as ol
+import opendict_view as view
 
 SERVER_NAME = "opendict"
 HTTP_HOST = "127.0.0.1"                 # 바인드 주소는 고정한다(외부에 직접 열지 않는다)
 HTTP_DEFAULT_PORT = 8768                # stdict 8766, urimal 8767
+HTTP_MODE = False                       # --http 로 띄우면 True(원격 서버는 사용자 화면에서 링크를 열 수 없다)
 TOKEN_FILE = Path(os.environ.get("OPENDICT_MCP_TOKEN_FILE") or Path.home() / ".config" / "opendict-mcp" / "token")
 
 INSTRUCTIONS = (
@@ -61,6 +63,9 @@ INSTRUCTIONS = (
     "and offer one line to search wider (definition searches, Hanja search) without starting yet. "
     "If a tool says a word is not found, say so; do not invent dictionary content. When a result lists a guessed base "
     "form (기본형 추정), present it as a guess. "
+    "When a tool result contains a Markdown link line \"[원본 보기](URL)\", you MUST copy that exact line as the last "
+    "line of your answer, after everything else: it opens the full entries from the local database and the user relies "
+    "on it. Do not omit it, reword it or replace it with the plain address. "
     "Answer in the user's language (Korean unless the user writes otherwise) and mention that the source is "
     "Urimalsaem (CC BY-SA 2.0 KR; examples with a cited source remain the original authors' works)."
 )
@@ -77,6 +82,28 @@ def _notice_tail():
     if os.environ.get("OPENDICT_MCP_NOTICE", "1").strip().lower() in ("0", "off", "false", "no"):
         return ""
     return "\n" + NOTICE
+
+
+def _view_link_enabled():
+    """이 컴퓨터의 로컬 서버일 때만 링크를 만든다(원격 서버의 127.0.0.1 은 사용자 컴퓨터가 아니다). OPENDICT_VIEW_LINK=0 이면 끈다."""
+    return not HTTP_MODE and os.environ.get("OPENDICT_VIEW_LINK", "1").strip().lower() not in ("0", "off", "false", "no")
+
+
+def _with_footer(text, label="", spec=None, found=True):
+    """결과의 출처 줄(ol.ATTRIBUTION, 맨 끝) 앞에 (로컬 서버이고 찾았으면) '[원본 보기](주소)' 마크다운 링크 한 줄을 끼운다:
+    링크 줄 → 출처 줄 순서. 모델이 그대로 옮겨 적기 쉽게 완성된 링크로 낸다. 링크 줄은 지시가 아니라 주소만 담은 사실이다: 링크를
+    적는 규칙은 서버 지침·도구 설명에 둔다(도구 결과 안의 지시는 Claude 가 주입으로 본다). spec 은 링크 서버가 클릭할 때 다시 그릴
+    검색 조건이다."""
+    if spec is None or not found or not _view_link_enabled():
+        return text
+    try:
+        line = f"[원본 보기]({view.get_server().add_query(label or 'result', **spec)})"
+    except Exception:  # noqa: BLE001  서버를 못 띄워도 조회는 돌려준다
+        return text
+    body, sep, tail = text.rpartition("\n")
+    if sep and tail == ol.ATTRIBUTION:
+        return f"{body}\n{line}\n{tail}"
+    return f"{text}\n{line}"
 
 
 _dictionary = None
@@ -119,9 +146,12 @@ def lookup_word(word: str, kinds: str = "", max_headwords: int = 12, include_exa
     labeled "[사전 외 설명]". End the answer with the source line.
     Args: word = the Korean word or phrase, e.g. "고드름"; kinds = optional filter of sense kinds, comma separated from
     일반어, 방언, 북한어, 옛말 (empty = all kinds), e.g. "북한어"; max_headwords = how many headwords to show (default 12);
-    include_examples = also show usage examples (with their cited source when the dictionary gives one)."""
+    include_examples = also show usage examples (with their cited source when the dictionary gives one).
+    If the result has a Markdown link line "[원본 보기](URL)", it opens a page that shows the entries in full from the
+    local database; you MUST copy that exact line as the last line of your answer (do not omit or reword it)."""
     res = _dict().lookup(word, kinds or None, None, include_examples, max_headwords)
-    return ol.format_lookup(res) + _notice_tail()
+    spec = {"kind": "lookup", "q": word, "kinds": kinds or None, "max_headwords": max_headwords, "examples": bool(include_examples)}
+    return _with_footer(ol.format_lookup(res), word, spec, bool(res["groups"])) + _notice_tail()
 
 
 @_safe
@@ -139,9 +169,12 @@ def search_dictionary(query: str, by: Literal["definition", "hanja", "pronunciat
     Explanations beyond the returned entries belong in a separate part labeled "[사전 외 설명]"; end the answer with the
     source line.
     Args: query = the text to search; by = the search kind above; kinds = optional filter of sense kinds, comma separated
-    from 일반어, 방언, 북한어, 옛말 (empty = all); limit = maximum results (default 10, at most 100)."""
+    from 일반어, 방언, 북한어, 옛말 (empty = all); limit = maximum results (default 10, at most 100).
+    If the result has a Markdown link line "[원본 보기](URL)", it opens a page that shows the found entries in full from
+    the local database; you MUST copy that exact line as the last line of your answer (do not omit or reword it)."""
     res = _dict().search(query, by, kinds or None, None, None, limit)
-    return ol.format_search(res) + _notice_tail()
+    spec = {"kind": "search", "q": query, "by": by, "kinds": kinds or None, "limit": limit}
+    return _with_footer(ol.format_search(res), query, spec, bool(res["hits"])) + _notice_tail()
 
 
 TOOLS = (lookup_word, search_dictionary)
@@ -235,6 +268,8 @@ def main():
     if args.port is not None and not args.http:
         ap.error("--port 는 --http 와 함께 쓰세요.")
     port = args.port or HTTP_DEFAULT_PORT
+    global HTTP_MODE
+    HTTP_MODE = bool(args.http)
     try:
         from mcp.server.mcpserver import MCPServer as FastMCP    # mcp 2.x (FastMCP 의 새 이름)
     except ImportError:

@@ -266,7 +266,7 @@ class Dictionary:
     def _sense(self, e, include_examples, full):
         code = e["target_code"]
         s = {"target_code": code, "group_order": e["group_order"], "word": e["word"], "sense_type": e["sense_type"],
-             "pos": e["pos"], "definition": e["definition"], "scientific_name": e["scientific_name"],
+             "pos": e["pos"], "definition": e["definition"], "definition_html": e["definition_html"], "scientific_name": e["scientific_name"],
              "origin": e["origin"], "allomorph": e["allomorph"],
              "cats": [r[0] for r in self.q("SELECT cat FROM sense_cats WHERE target_code=?", (code,))],
              "regions": [r[0] for r in self.q("SELECT region FROM sense_regions WHERE target_code=?", (code,))],
@@ -284,9 +284,10 @@ class Dictionary:
              "relations": self._relations(code, full)}
         if include_examples:
             lim = "" if full else " LIMIT 8"
-            s["examples"] = [{"text": r["example"], "source": r["source"], "origin": r["origin"], "region": r["region"],
-                              "translation": r["translation"]} for r in self.q(
-                "SELECT example, source, origin, region, translation FROM examples WHERE target_code=? ORDER BY seq" + lim, (code,))]
+            s["examples"] = [{"text": r["example"], "html": r["example_html"], "source": r["source"], "origin": r["origin"],
+                              "region": r["region"], "translation": r["translation"]} for r in self.q(
+                "SELECT example, example_html, source, origin, region, translation FROM examples WHERE target_code=? "
+                "ORDER BY seq" + lim, (code,))]
         return s
 
     def _relations(self, code, full):
@@ -488,9 +489,9 @@ def format_lookup(res):
         lines.append("")
     if res["total_groups"] > res["shown"]:
         lines.append(f"표제어 그룹 {res['total_groups']}개 중 {res['shown']}개만 보여 줍니다.")
-    lines.append(ATTRIBUTION)
     if any("ː" in (p["text"] or "") for g in res["groups"] for p in g["pronunciations"]):
         lines.append(LONG_NOTE)
+    lines.append(ATTRIBUTION)          # 출처 줄이 항상 맨 끝(MCP 가 그 앞에 원본 보기 링크 줄을 끼운다)
     return "\n".join(lines).rstrip()
 
 
