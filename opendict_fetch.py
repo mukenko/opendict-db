@@ -5,7 +5,7 @@
 SQLite(data/raw.sqlite)에 압축 저장한다. 스키마 변환은 이 스크립트의 책임이 아니다.
 
 사용 예
-  python3 opendict_fetch.py fetch --range 1 1600000    # 코드 범위 스캔(이어받기, 하루 한도에서 멈춤; 전체 약 35일)
+  python3 opendict_fetch.py fetch --range 1 1870000    # 코드 범위 스캔(이어받기, 하루 한도에서 멈춤; 전체 약 40일)
   python3 opendict_fetch.py fetch --codes 450817      # 코드 지정
   python3 opendict_fetch.py status                     # 진행 현황
   python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd 용: 전체 범위, 잠금·시각 붙은 로그(data/fetch.log, 15일 보관)
@@ -36,7 +36,7 @@ BASE_URL = "https://opendict.korean.go.kr"
 KEY_NAME = "OPENDICT_API_KEY"
 DEFAULT_LIMIT = 45000          # 하루 공식 한도 50,000건보다 여유를 둔다
 MAX_CONSECUTIVE_ERRORS = 3     # 연속 오류가 이 횟수에 이르면 중단
-MAX_CONSECUTIVE_UNAVAILABLE = 20   # HTTP 500 이 이만큼 연속되면 서버 장애로 보고 중단
+MAX_CONSECUTIVE_UNAVAILABLE = 20   # HTTP 500 이 이만큼 연속되면 이미 받은 코드를 다시 호출해 서버 상태를 확인(정상이면 계속, 아니면 중단)
 
 
 class LimitReached(Exception):
@@ -216,6 +216,21 @@ def set_state(db, code, status, note):
     db.commit()
 
 
+def server_alive(client):
+    """HTTP 500 이 연속될 때: 이미 받은 정상 코드 하나를 다시 호출해 서버가 정상인지 본다(저장하지 않음).
+    표제어 몇 개만 조회가 안 되는 구간이면 True, 서버 전체 장애(같은 정상 코드도 실패)면 False."""
+    row = client.db.execute(
+        "SELECT target_code FROM fetch_state WHERE status='ok' ORDER BY target_code LIMIT 1 OFFSET 500").fetchone()
+    if not row:
+        return False
+    try:
+        root = parse_xml(client.call("/api/view", {"method": "target_code", "q": str(row[0]), "req_type": "xml"}))
+        check_error(root)
+        return root.find("item") is not None
+    except (ApiError, urllib.error.URLError):
+        return False
+
+
 # ---------------------------------------------------------------- 수집 루프
 def run_codes(client, codes, force=False, verbose=False, retry_unavailable=False):
     db = client.db
@@ -242,8 +257,11 @@ def run_codes(client, codes, force=False, verbose=False, retry_unavailable=False
                     consecutive_unavail += 1
                     set_state(db, code, "unavailable", str(e))
                     if consecutive_unavail >= MAX_CONSECUTIVE_UNAVAILABLE:
-                        print(f"HTTP 500 이 {MAX_CONSECUTIVE_UNAVAILABLE}개 연속되어 서버 장애로 보고 중단합니다 (마지막 코드 {code}).")
-                        break
+                        if server_alive(client):
+                            consecutive_unavail = 0     # 조회가 안 되는 코드가 몰려 있는 구간일 뿐, 계속 진행
+                        else:
+                            print(f"HTTP 500 이 {MAX_CONSECUTIVE_UNAVAILABLE}개 연속되고 정상 코드도 조회가 안 되어 서버 장애로 보고 중단합니다 (마지막 코드 {code}).")
+                            break
                 except ApiError as e:
                     counts["error"] += 1
                     consecutive_err += 1
@@ -269,7 +287,7 @@ LOG_PATH = ROOT / "data" / "fetch.log"
 LAUNCHD_LOG = ROOT / "data" / "fetch_launchd.log"
 LOCK_PATH = ROOT / "data" / ".fetch.lock"
 LOG_KEEP_DAYS = 15              # projects/CLAUDE.md 작업 원칙 1
-SCAN_RANGE = (1, 1600000)       # 존재하는 코드는 약 1,553,000 까지, 그 뒤는 total=0
+SCAN_RANGE = (1, 1870000)       # 1,600,000 까지는 약 25% 가 존재하고, 그 뒤는 드문드문(북한어 등) 약 1,867,000 까지. 그 뒤는 전부 HTTP 500
 
 
 def log(msg):
