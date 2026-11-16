@@ -6,7 +6,7 @@
 ## 사전 규모 (2026년 9월 통계)
 
 - 표제어 1,212,844개 (단어 783,461 · 구 429,383), 일상어 506,415 · 전문어 706,422
-- target_code는 1부터 약 1,553,000까지, 그 안에서 존재하는 코드는 약 75% (나머지는 빈 코드)
+- target_code는 1부터 약 1,867,000까지(그 뒤는 전부 HTTP 500). 1,600,000까지는 존재하는 코드가 약 75%(나머지는 빈 코드), 그 뒤는 드문드문 몰려 있다(북한어·대중가요 등)
 - 같은 코드라도 `/api/view`가 HTTP 500을 내는 것이 있다(예: 13, 27, 132 …). 수집기는 `unavailable`로 기록하고 넘어간다.
 
 ## Open API
@@ -25,10 +25,14 @@
 ## 사용
 
 ```
-python3 opendict_fetch.py fetch --range 1 1600000    # 하루 한도에서 멈추고, 다시 실행하면 이어서(전체 약 35일)
+python3 opendict_fetch.py fetch --range 1 1870000    # 하루 한도에서 멈추고, 다시 실행하면 이어서(전체 약 40일)
 python3 opendict_fetch.py status
-python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd(매일 09:15)가 실행: 잠금·시각 붙은 로그 data/fetch.log
-python3 opendict_fetch.py fetch --range 1 1600000 --retry-unavailable   # HTTP 500 이던 코드 다시 시도
+python3 opendict_lookup.py 고드름 [--type 방언] [--examples] [--json]   # 표제어 조회(--by definition|hanja|pronunciation|form|cat|region 으로 다른 방식, --code N 으로 코드 조회)
+python3 -m unittest tests.test_lookup -v   # 조회 시험
+python3 opendict_mcp.py --call lookup_word 고드름   # MCP 도구 결과 확인(SDK 없이). 서버: .venv/bin/python opendict_mcp.py [--http --port 8768]
+python3 opendict_build.py            # 원본 -> 조회용 data/opendict.sqlite (검증 통과 시 교체, 이전 버전은 .prev). --limit N 은 시험용
+python3 opendict_fetch.py fetch --scheduled --limit 49000   # launchd(매일 02:00, 07:15)가 실행: 잠금·시각 붙은 로그 data/fetch.log
+python3 opendict_fetch.py fetch --range 1 1870000 --retry-unavailable   # HTTP 500 이던 코드 다시 시도
 ```
 
 원본은 XML 그대로 `data/raw.sqlite`에 압축 저장합니다(`data/`는 저장소에 올리지 않음).
@@ -36,7 +40,7 @@ python3 opendict_fetch.py fetch --range 1 1600000 --retry-unavailable   # HTTP 5
 ## 계획
 
 1. (진행 중) 원본 수집
-2. 스키마 설계(뜻풀이·용례·관련어·원어·전문 분야 등) → 빌드 → 조회 → MCP
+2. 스키마 설계 → 빌드(`opendict_build.py`) → 조회(`opendict_lookup.py`) → MCP(`opendict_mcp.py`, 도구 `lookup_word`·`search_dictionary`, stdio/HTTP)
 3. 정기 업데이트(고친 날짜 검색 + 신규 확인)
 
 ## 데이터 출처
